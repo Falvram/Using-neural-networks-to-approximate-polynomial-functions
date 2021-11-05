@@ -1,7 +1,7 @@
 import math
 
 from sklearn.metrics import mean_squared_error
-from numpy import asarray
+from numpy import asarray, arange
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
 from matplotlib import pyplot
@@ -11,16 +11,16 @@ from sklearn.preprocessing import MinMaxScaler
 C = 1  # C > 0
 m = 3  # Degree of a polynomial
 eps = 0.01  # ε ∈ (0, 1/2)
-D = 1
+D = 1  # the boundaries of the segment in which we perform the approximation
 W = 16  # W ≤ 16 - network width
 
 # POLYNOMIAL FUNCTION
-x = asarray([i for i in range(-50, 51)])
-a = asarray([i for i in range(1, 100)])
-y = asarray([i ** 3 for i in x])
+x = asarray([i for i in arange(-1, 1.01, 0.01)])
+a = asarray([i for i in range(2, 5)])
+y = asarray([a[0] * i ** 2 + a[1] * i ** 3 + a[2] * i ** 4 for i in x])
 
 # VARIABLES
-A = max(a)  # maximum of
+A = max(a)  # maximum of factor
 L = C * m * (math.log2(A) + math.log2(math.pow(eps, -1)) + m * math.log2(D) + math.log2(m))  # depth of network ≤ L
 
 # SCALE THE INPUT DATA
