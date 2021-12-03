@@ -5,12 +5,15 @@ import sympy
 import time
 import numpy
 import tensorflow as tf
+from keras.callbacks import ReduceLROnPlateau
 from sklearn.metrics import mean_squared_error
 from numpy import asarray, arange
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
 from matplotlib import pyplot
 from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.optimizers import SGD
 
 
 class SaveBestModel(tf.keras.callbacks.Callback):
@@ -43,69 +46,66 @@ def train_predict_model(x, y, m, absolute_power):
     D = 1  # the boundaries of the segment in which we perform the approximation
     W = 16  # W ≤ 16 - network width
 
-    # POLYNOMIAL FUNCTION
-    # x = asarray([i for i in arange(-1, 1.01, 0.01)])
-    # a = asarray([i for i in range(2, 5)])
-    # y = asarray([a[0] * i ** 2 + a[1] * i ** 3 + a[2] * i ** 4 for i in x])
-
     # VARIABLES
     # A = 1  # maximum of factor
     if m == 0:
         m = 1
-    L = C * m * (math.log2(A) + math.log2(math.pow(eps, -1)) + m * math.log2(D) + math.log2(m))  # depth of network ≤ L
-    if L > 997:
-        L = 900
-    print("A, m, Depth:", A, m, L)
+    Lc = int(C * m * (math.log2(A) + math.log2(math.pow(eps, -1)) + m * math.log2(D) + math.log2(m))) # depth of network ≤ L
+    if Lc > 30:
+        L = 30
+    else:
+        L = Lc
+    print("A, m, Depth:", A, m, int(L))
 
-    # SCALE THE INPUT DATA
-    # var_x = asarray([i for i in arange(-3, 3.01, 0.01)])
-    # var_y = asarray([i ** m__ for i in var_x])
-    # var_x = numpy.append(numpy.random.power(absolute_power, 1000), -numpy.random.power(absolute_power, 1000))
+    # TRAINING DATA
     var_x = []
     var_x = numpy.append(var_x, x)
-    # var_x = []
-    # var_x = numpy.append(var_x, numpy.random.rand(1, 10000))
-    # var_x = numpy.append(var_x, -numpy.random.rand(1, 10000))
-    # var_x = numpy.append(var_x, [random.uniform(0.875, 1) for i in range(50000)])
-    # var_x = numpy.append(var_x, [-random.uniform(-1, -0.875) for i in range(50000)])
-    # var_x = numpy.append(var_x, [-random.uniform(-1, -0.998) for i in range(5000)])
-    # var_x = numpy.append(var_x, [random.uniform(1, 0.998) for i in range(5000)])
+    var_x = numpy.append(var_x, numpy.random.rand(1, 1310720))
+    var_x = numpy.append(var_x, -numpy.random.rand(1, 131072))
     var_x = var_x.reshape(len(var_x), 1)
     var_y = asarray([i ** absolute_power for i in var_x])
 
-    # scale_var_x = MinMaxScaler()
-    # scale_var_y = MinMaxScaler()
-    # var_x = scale_var_x.fit_transform(var_x)
-    # var_y = scale_var_y.fit_transform(var_y)
-    #
+    # SCALE THE INPUT DATA
+    scale_var_x = MinMaxScaler()
+    scale_var_y = MinMaxScaler()
+    var_x = scale_var_x.fit_transform(var_x)
+    var_y = scale_var_y.fit_transform(var_y)
     x = x.reshape((len(x), 1))
     y = y.reshape((len(y), 1))
-    # scale_x = MinMaxScaler()
-    # scale_y = MinMaxScaler()
-    # x = scale_x.fit_transform(x)
-    # y = scale_y.fit_transform(y)
+    scale_x = MinMaxScaler()
+    scale_y = MinMaxScaler()
+    x = scale_x.fit_transform(x)
+    y = scale_y.fit_transform(y)
 
     # NETWORK TRAINING
     model = Sequential()
     model.add(Dense(W, input_dim=1, activation='relu'))
-    for i in range(int(L)):
-        model.add(Dense(W, activation='relu'))
+    for i in range(int(L) - 1):
+        model.add(Dense(int(W), activation='relu'))
     model.add(Dense(1))
-    model.compile(loss='mse', optimizer='sgd', metrics=['binary_accuracy'])
+    starter_learning_rate = 0.0001
+    end_learning_rate = 0.00001
+    decay_steps = 10000
+    learning_rate_fn = tf.keras.optimizers.schedules.PolynomialDecay(
+        starter_learning_rate,
+        decay_steps,
+        end_learning_rate,
+        power=0.5)
+    model.compile(loss='mse', optimizer=Adam(learning_rate=learning_rate_fn), metrics=['binary_accuracy'])
     save_best_model = SaveBestModel()
-    history = model.fit(var_x, var_y, validation_split=0.2, epochs=5, batch_size=10, verbose=0,
+    history = model.fit(var_x, var_y, validation_split=0.2, epochs=int(2 * math.log2(Lc) * Lc) + 100, batch_size=131072, verbose=0,
                         callbacks=[save_best_model])
     model.set_weights(save_best_model.best_weights)
-    print(history.history.keys())
+    # print(history.history.keys())
     show_acc_loss(history)
 
     # NETWORK PREDICT
     yhat = model.predict(x)
 
     # PLOT RESULTS
-    # x = scale_x.inverse_transform(x)
-    # y = scale_y.inverse_transform(y)
-    # yhat = scale_y.inverse_transform(yhat)
+    x = scale_x.inverse_transform(x)
+    y = scale_y.inverse_transform(y)
+    yhat = scale_y.inverse_transform(yhat)
     # report model error
     print('MSE: %.3f' % mean_squared_error(y, yhat))
     plot(x, y, yhat)
@@ -126,13 +126,13 @@ def plot(actual_x, actual_y, predicted_y):
 
 
 def show_acc_loss(history):
-    pyplot.plot(history.history['binary_accuracy'])
-    pyplot.plot(history.history['val_binary_accuracy'])
-    pyplot.title('model accuracy')
-    pyplot.ylabel('accuracy')
-    pyplot.xlabel('epoch')
-    pyplot.legend(['train', 'test'], loc='upper left')
-    pyplot.show()
+    # pyplot.plot(history.history['binary_accuracy'])
+    # pyplot.plot(history.history['val_binary_accuracy'])
+    # pyplot.title('model accuracy')
+    # pyplot.ylabel('accuracy')
+    # pyplot.xlabel('epoch')
+    # pyplot.legend(['train', 'test'], loc='upper left')
+    # pyplot.show()
     # summarize history for loss
     pyplot.plot(history.history['loss'])
     pyplot.plot(history.history['val_loss'])
@@ -176,7 +176,6 @@ def brauer(coeff, power):
         y = asarray([k ** res_list[i][0] for k in x])
         y_predicted, absolute_power = train_predict_model(x, y, res_list[i][0], res_list[i][0])
         answ, absolute_power = evaluate_two_power_n(y_predicted, res_list[i][1], absolute_power)
-        # answ = answ.reshape(1, len(answ))
         answ = answ[0]
         res = numpy.multiply(res, answ)
     res, absolute_power = train_predict_model(x, asarray([coeff * i for i in res]), 1, absolute_power)
@@ -244,6 +243,8 @@ def approximate_function(function):
 
 
 def test_two_n_numbers(n):
+    global A
+    A = 1
     y = asarray([i for i in x])
     power = 2 ** n
     print("Time")
@@ -251,11 +252,11 @@ def test_two_n_numbers(n):
     evaluate_two_power_n(y, n, 1)
     print("--- %s seconds ---" % (time.time() - start_time))
     start_time = time.time()
-    train_predict_model(x, [i ** power for i in x], power, power)
+    train_predict_model(x, asarray([i ** power for i in x]), power, power)
     print("--- %s seconds ---" % (time.time() - start_time))
 
 
-x = asarray([i for i in arange(-1, 1.001, 0.001)])
+x = asarray([i for i in arange(-1, 1.00001, 0.00001)])
 func = "15 * x ^ 51 + 9 * x ^ 2 + 34"
 # approximate_function(func)
-test_two_n_numbers(5)
+test_two_n_numbers(10)
