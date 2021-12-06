@@ -192,7 +192,7 @@ def brauer(coeff, power):
         res = numpy.multiply(res, answ)
     res = asarray([coeff * i for i in res])
     y = asarray([coeff * i ** power for i in x])
-    title_func = "y = x^%d" % power
+    title_func = "y = %d * x^%d" % (coeff, power)
     plot(x, y, res)
     return res.reshape(1, len(res))
 
@@ -217,16 +217,13 @@ def yao_s(coeff, power):
             temp, absolute_power = evaluate_two_power_n(y, factorization[i][1][k], 1)
             term = numpy.multiply(term, temp)
         title_func = ""
-        title_func = "y = x^%d" % absolute_power * factorization[i][0]
+        title_func = "y = x^%d" % int(absolute_power * factorization[i][0])
         term = train_predict_model(x, asarray([j ** factorization[i][0] for j in term]),
                                    factorization[i][0], absolute_power * factorization[i][0])
         answ = numpy.multiply(answ, term)
     answ = asarray([coeff * j for j in answ])
     y = asarray([coeff * i ** power for i in x])
-    if factorization:
-        title_func = "y = x^%d" % power
-    else:
-        title_func = "y = %d" % coeff
+    title_func = "y = %d * x^%d" % (coeff, power)
     plot(x, y, answ)
     return answ
 
