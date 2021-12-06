@@ -180,7 +180,7 @@ def brauer(coeff, power):
     if power == 0:
         res = asarray([coeff * i for i in res])
         y = asarray([coeff * i ** power for i in x])
-        title_func = "y = %d" % coeff
+        title_func = "y = %d * x ^%d" % (coeff, power)
         plot(x, y, res)
         return res.reshape(1, len(res))
     for i in range(len(res_list)):
