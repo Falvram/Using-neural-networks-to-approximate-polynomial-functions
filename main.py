@@ -3,7 +3,7 @@ import sympy
 import time
 import numpy
 import tensorflow as tf
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error
 from numpy import asarray, arange
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
@@ -114,7 +114,7 @@ def train_predict_model(x, y, m, power_or_poly):
     y = scale_y.inverse_transform(y)
     yhat = scale_y.inverse_transform(yhat)
     # report model error
-    print('MSE: %.5f' % mean_squared_error(y, yhat))
+    print('MAE: %.5f' % mean_absolute_error(y, yhat))
     plot(x, y, yhat)
     yhat = yhat.reshape(1, len(yhat))
     return yhat[0]
@@ -281,15 +281,18 @@ def approximate_function(function):
 
 def test_two_n_numbers(n):
     global A
+    global title_alg, title_func
     A = 1
     y = asarray([i for i in x])
     power = 2 ** n
     print("Time")
+    title_alg = "Replacement algorithm, "
     start_time = time.time()
     evaluate_two_power_n(y, n, 1)
     print("--- %s seconds ---" % (time.time() - start_time))
+    title_alg = "Standard algorithm, "
     start_time = time.time()
-    train_predict_model(x, asarray([i ** power for i in x]), 2, power)
+    train_predict_model(x, asarray([i ** power for i in x]), power, power)
     print("--- %s seconds ---" % (time.time() - start_time))
 
 
@@ -298,5 +301,5 @@ title_alg = ""
 title_func = ""
 A = 1
 func = "15 * x ^ 51 + 9 * x ^ 2 + 34"
-approximate_function(func)
-# test_two_n_numbers(6)
+# approximate_function(func)
+test_two_n_numbers(6)
