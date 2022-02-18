@@ -1,15 +1,18 @@
 import math
+import random
+import sys
+
 import sympy
 import time
 import numpy
 import tensorflow as tf
-from sklearn.metrics import mean_squared_error, mean_absolute_error
-from numpy import asarray, arange
+from sklearn.metrics import mean_absolute_error
+from numpy import asarray, arange, polyfit, poly1d
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
 from matplotlib import pyplot
 from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.optimizers import Adam, SGD, RMSprop, Adagrad, Adadelta, Adamax, Nadam, Ftrl
 
 
 class SaveBestModel(tf.keras.callbacks.Callback):
@@ -24,14 +27,25 @@ class SaveBestModel(tf.keras.callbacks.Callback):
 
     def on_epoch_end(self, epoch, logs=None):
         metric_value = logs[self.save_best_metric]
+        global best_loss
         if self.max:
             if metric_value > self.best:
                 self.best = metric_value
                 self.best_weights = self.model.get_weights()
         else:
             if metric_value < self.best:
+                best_loss = metric_value
                 self.best = metric_value
                 self.best_weights = self.model.get_weights()
+
+
+def get_lr_metric(optimizer):
+    def lr(y_true, y_pred):
+        val = optimizer._decayed_lr(var_dtype=tf.float32)
+        tf.print(val, output_stream=sys.stdout)
+        return val
+
+    return lr
 
 
 def train_predict_model(x, y, m, power_or_poly):
@@ -50,13 +64,12 @@ def train_predict_model(x, y, m, power_or_poly):
         L = 30
     else:
         L = Lc
-    epochs = 200
+    epochs = int(math.log2(Lc) * Lc) + 200
 
     # TRAINING DATA
-    var_x = [0, 1, -1]
-    var_x = numpy.append(var_x, x)
-    var_x = numpy.append(var_x, numpy.random.rand(1, 131072))
-    var_x = numpy.append(var_x, -numpy.random.rand(1, 131072 - len(var_x) % 131072))
+    var_x = []
+    var_x = numpy.append(var_x, numpy.random.rand(1, 4096))
+    var_x = numpy.append(var_x, -numpy.random.rand(1, 4096))
     numpy.random.shuffle(var_x)
     if isinstance(power_or_poly, sympy.polys.polytools.Poly):
         var_y = asarray([0 for i in var_x])
@@ -89,17 +102,47 @@ def train_predict_model(x, y, m, power_or_poly):
     for i in range(L - 1):
         model.add(Dense(W, activation='relu'))
     model.add(Dense(1))
-    learning_rate_fn = tf.keras.optimizers.schedules.PolynomialDecay(
+    learning_rate_fn_4_5 = tf.keras.optimizers.schedules.PolynomialDecay(
         initial_learning_rate=0.0001,
         decay_steps=10000,
         end_learning_rate=0.00001,
         power=0.5)
+    learning_rate_fn_5_6 = tf.keras.optimizers.schedules.PolynomialDecay(
+        initial_learning_rate=0.00001,
+        decay_steps=10000,
+        end_learning_rate=0.000001,
+        power=0.5)
+
     model.compile(loss='mse',
-                  optimizer=Adam(learning_rate=learning_rate_fn))
+                  optimizer=RMSprop())
+    save_best_model = SaveBestModel()
+    history = model.fit(var_x[0:512], var_y[0:512],
+                        validation_split=0.2,
+                        epochs=epochs * 5,
+                        batch_size=131072,
+                        verbose=0,
+                        callbacks=[save_best_model])
+    model.set_weights(save_best_model.best_weights)
+    show_loss(history)
+
+    model.compile(loss='mse',
+                  optimizer=Adamax(learning_rate=learning_rate_fn_4_5))
+    save_best_model = SaveBestModel()
+    history = model.fit(var_x[0:4096], var_y[0:4096],
+                        validation_split=0.2,
+                        epochs=epochs * 3,
+                        batch_size=131072,
+                        verbose=0,
+                        callbacks=[save_best_model])
+    model.set_weights(save_best_model.best_weights)
+    show_loss(history)
+
+    model.compile(loss='mse',
+                  optimizer=Adamax(learning_rate=learning_rate_fn_5_6))
     save_best_model = SaveBestModel()
     history = model.fit(var_x, var_y,
                         validation_split=0.2,
-                        epochs=int(math.log2(Lc) * Lc) + epochs,
+                        epochs=epochs * 3,
                         batch_size=131072,
                         verbose=0,
                         callbacks=[save_best_model])
@@ -114,7 +157,7 @@ def train_predict_model(x, y, m, power_or_poly):
     y = scale_y.inverse_transform(y)
     yhat = scale_y.inverse_transform(yhat)
     # report model error
-    print('MAE: %.5f' % mean_absolute_error(y, yhat))
+    print('MAE: %.10f' % mean_absolute_error(y, yhat))
     plot(x, y, yhat)
     yhat = yhat.reshape(1, len(yhat))
     return yhat[0]
@@ -130,6 +173,7 @@ def plot(actual_x, actual_y, predicted_y):
     pyplot.ylabel('Output Variable (y)')
     pyplot.legend()
     pyplot.show()
+    print('MAE: %.10f' % mean_absolute_error(actual_y, predicted_y))
 
 
 def show_loss(history):
@@ -236,6 +280,14 @@ def yao_s_d(n, res):
     return [n, answ]
 
 
+def least_squares(x, y, deg):
+    x = numpy.array(x, dtype='float')
+    y = numpy.array(y, dtype='float')
+    coeffs = numpy.polyfit(x, y, deg)
+    f = poly1d(coeffs)
+    plot(x, y, f(x))
+
+
 def parse_function(function):
     global A
     poly = sympy.polys.polytools.poly_from_expr(function)[0]
@@ -300,6 +352,8 @@ x = asarray([i for i in arange(-1, 1.00001, 0.00001)])
 title_alg = ""
 title_func = ""
 A = 1
+best_loss = 0
 func = "15 * x ^ 51 + 9 * x ^ 2 + 34"
 # approximate_function(func)
 test_two_n_numbers(6)
+
