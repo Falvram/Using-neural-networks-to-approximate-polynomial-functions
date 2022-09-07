@@ -1,18 +1,17 @@
 import math
-import random
 import sys
 
 import sympy
 import time
 import numpy
 import tensorflow as tf
+from keras import Sequential
+from keras.optimizers import RMSprop, Adamax
+from numpy import asarray, arange, poly1d
 from sklearn.metrics import mean_absolute_error
-from numpy import asarray, arange, polyfit, poly1d
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense
 from matplotlib import pyplot
 from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.optimizers import Adam, SGD, RMSprop, Adagrad, Adadelta, Adamax, Nadam, Ftrl
+from keras.layers import Dense
 
 
 class SaveBestModel(tf.keras.callbacks.Callback):
@@ -122,6 +121,7 @@ def train_predict_model(x, y, m, power_or_poly):
                         batch_size=131072,
                         verbose=0,
                         callbacks=[save_best_model])
+
     model.set_weights(save_best_model.best_weights)
     show_loss(history)
 
@@ -356,4 +356,3 @@ best_loss = 0
 func = "15 * x ^ 51 + 9 * x ^ 2 + 34"
 # approximate_function(func)
 test_two_n_numbers(6)
-
